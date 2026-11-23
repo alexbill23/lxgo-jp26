@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LifeX Go"><meta name="theme-color" content="#f2f3ef"><meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png">
+<title>LifeX Go</title>
+<style>:root{color-scheme:light}body{margin:0;font-family:-apple-system,Helvetica,Arial,sans-serif;background:#f2f3ef;color:#18202e;display:flex;min-height:100vh;align-items:center;justify-content:center}
+.c{background:#fff;border-radius:20px;padding:26px 22px;width:min(340px,88vw);box-shadow:0 2px 12px rgba(0,0,0,.08);text-align:center}
+h1{font-size:24px;margin:0 0 4px}p{color:#5d6675;font-size:14px;margin:0 0 16px}
+input{width:100%;box-sizing:border-box;font-size:18px;padding:12px;border:1px solid #d9ddd6;border-radius:12px;margin-bottom:12px}
+button{width:100%;font-size:17px;font-weight:600;padding:13px;border:0;border-radius:12px;background:#0a84ff;color:#fff}
+#m{color:#c0392b;font-size:14px;min-height:18px;margin-top:10px}</style></head><body>
+<div class="c" id="box" style="display:none"><h1>LifeX Go</h1><p>Japan, Nov 25 to Dec 6</p>
+<form id="f"><input id="pw" type="password" placeholder="Password" autocomplete="current-password"><button>Open</button></form><div id="m"></div></div>
+<script>
+const base=location.pathname.replace(/[^/]*$/,'');
+async function hasApp(){try{const c=await caches.open('lxgo-app');return !!(await c.match(base+'app/index.html'))}catch(e){return false}}
+async function unlock(pw){
+  const buf=new Uint8Array(await (await fetch('app.bin')).arrayBuffer());
+  const salt=buf.slice(0,16),iv=buf.slice(16,28),ct=buf.slice(28);
+  const k0=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k0,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+  const b=JSON.parse(new TextDecoder().decode(pt));
+  const c=await caches.open('lxgo-app');
+  for(const [f,v] of Object.entries(b)){
+    const bin=Uint8Array.from(atob(v.d),ch=>ch.charCodeAt(0));
+    await c.put(base+'app/'+f,new Response(bin,{headers:{'Content-Type':v.t}}));
+  }
+}
+(async()=>{
+  if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;}catch(e){}}
+  if(await hasApp()&&navigator.serviceWorker&&navigator.serviceWorker.controller){location.replace(base+'app/');return;}
+  document.getElementById('box').style.display='';
+  document.getElementById('f').onsubmit=async ev=>{ev.preventDefault();const m=document.getElementById('m');m.style.color='#5d6675';m.textContent='Opening...';
+    try{await unlock(document.getElementById('pw').value.trim());
+      if(!navigator.serviceWorker.controller){m.textContent='Almost ready, one moment...';await new Promise(r=>setTimeout(r,800));location.reload();return;}
+      location.replace(base+'app/');}
+    catch(e){m.style.color='#c0392b';m.textContent='Wrong password. Try again.';}};
+})();
+</script></body></html>
