@@ -30,15 +30,20 @@ async function unlock(pw,fresh){
 }
 (async()=>{
   if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;}catch(e){}}
+  let needPw=false,newV='';
   if(await hasApp()&&navigator.serviceWorker&&navigator.serviceWorker.controller){
     // quietly pick up a newer version when online, using the password saved on this phone
     try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),2500);
-      const v=(await (await fetch('version.txt?'+Date.now(),{signal:ctl.signal,cache:'no-store'})).text()).trim();
+      const v=(await (await fetch('version.txt?'+Date.now(),{signal:ctl.signal,cache:'no-store'})).text()).trim();newV=v;
       const pw=localStorage.getItem('lxgo:pw');
-      if(v&&pw&&v!==localStorage.getItem('lxgo:v')){await unlock(pw,true);localStorage.setItem('lxgo:v',v);}
+      if(v&&v!==localStorage.getItem('lxgo:v')){
+        if(!pw)needPw=true;
+        else{try{await unlock(pw,true);localStorage.setItem('lxgo:v',v);}catch(err){if(err&&err.name==='OperationError'){needPw=true;localStorage.removeItem('lxgo:pw');}}}
+      }
     }catch(e){}
-    location.replace(base+'app/');return;}
+    if(!needPw){location.replace(base+'app/');return;}}
   document.getElementById('box').style.display='';
+  if(needPw){const m=document.getElementById('m');m.style.color='#5d6675';m.innerHTML='The password changed. Enter the new one to get the latest version.<br><a id="keep" href="app/" style="color:#0a84ff">Keep using the copy on this phone</a>';document.getElementById('keep').onclick=()=>{try{sessionStorage.setItem('lxgo:tried',newV)}catch(e){}};}
   document.getElementById('f').onsubmit=async ev=>{ev.preventDefault();const m=document.getElementById('m');m.style.color='#5d6675';m.textContent='Opening...';
     try{const pw=document.getElementById('pw').value.trim();await unlock(pw,true);try{localStorage.setItem('lxgo:pw',pw);const v=(await (await fetch('version.txt?'+Date.now(),{cache:'no-store'})).text()).trim();localStorage.setItem('lxgo:v',v);}catch(e){}
       if(!navigator.serviceWorker.controller){m.textContent='Almost ready, one moment...';await new Promise(r=>setTimeout(r,800));location.reload();return;}
