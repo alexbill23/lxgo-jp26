@@ -15,8 +15,8 @@ button{width:100%;font-size:17px;font-weight:600;padding:13px;border:0;border-ra
 <script>
 const base=location.pathname.replace(/[^/]*$/,'');
 async function hasApp(){try{const c=await caches.open('lxgo-app');return !!(await c.match(base+'app/index.html'))}catch(e){return false}}
-async function unlock(pw){
-  const buf=new Uint8Array(await (await fetch('app.bin')).arrayBuffer());
+async function unlock(pw,fresh){
+  const buf=new Uint8Array(await (await fetch('app.bin'+(fresh?'?'+Date.now():''),{cache:fresh?'no-store':'default'})).arrayBuffer());
   const salt=buf.slice(0,16),iv=buf.slice(16,28),ct=buf.slice(28);
   const k0=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
   const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},k0,{name:'AES-GCM',length:256},false,['decrypt']);
@@ -30,10 +30,17 @@ async function unlock(pw){
 }
 (async()=>{
   if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('sw.js');await navigator.serviceWorker.ready;}catch(e){}}
-  if(await hasApp()&&navigator.serviceWorker&&navigator.serviceWorker.controller){location.replace(base+'app/');return;}
+  if(await hasApp()&&navigator.serviceWorker&&navigator.serviceWorker.controller){
+    // quietly pick up a newer version when online, using the password saved on this phone
+    try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),2500);
+      const v=(await (await fetch('version.txt?'+Date.now(),{signal:ctl.signal,cache:'no-store'})).text()).trim();
+      const pw=localStorage.getItem('lxgo:pw');
+      if(v&&pw&&v!==localStorage.getItem('lxgo:v')){await unlock(pw,true);localStorage.setItem('lxgo:v',v);}
+    }catch(e){}
+    location.replace(base+'app/');return;}
   document.getElementById('box').style.display='';
   document.getElementById('f').onsubmit=async ev=>{ev.preventDefault();const m=document.getElementById('m');m.style.color='#5d6675';m.textContent='Opening...';
-    try{await unlock(document.getElementById('pw').value.trim());
+    try{const pw=document.getElementById('pw').value.trim();await unlock(pw,true);try{localStorage.setItem('lxgo:pw',pw);const v=(await (await fetch('version.txt?'+Date.now(),{cache:'no-store'})).text()).trim();localStorage.setItem('lxgo:v',v);}catch(e){}
       if(!navigator.serviceWorker.controller){m.textContent='Almost ready, one moment...';await new Promise(r=>setTimeout(r,800));location.reload();return;}
       location.replace(base+'app/');}
     catch(e){m.style.color='#c0392b';m.textContent='Wrong password. Try again.';}};
